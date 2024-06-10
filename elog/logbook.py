@@ -15,7 +15,7 @@ class Logbook(object):
     """
 
     def __init__(self, hostname, logbook='', port=None, user=None, password=None, subdir='', use_ssl=True,
-                 encrypt_pwd=True):
+                 encrypt_pwd=True, bearer_token=None):
         """
         :param hostname: elog server hostname. If whole url is specified here, it will be parsed and arguments:
                          "logbook, port, subdir, use_ssl" will be overwritten by parsed values.
@@ -29,6 +29,8 @@ class Logbook(object):
         :param encrypt_pwd: To avoid exposing password in the code, this flag can be set to False and password
                             will then be handled as it is (user needs to provide sha256 encrypted password with
                             salt= '' and rounds=5000)
+        :param bearer_token: bearer token (if authentication needed) Access Token as obtained by an OAuth2 issuer.
+                             If callable, the token is retrieved calling this function each time is needed.
         :return:
         """
         hostname = hostname.strip()
@@ -105,6 +107,10 @@ class Logbook(object):
         self.logbook = logbook
         self._user = user
         self._password = _handle_pswd(password, encrypt_pwd)
+        self._bearer_token_arg = bearer_token
+
+    def _bearer_token(self):
+        return self._bearer_token_arg() if callable(self._bearer_token_arg) else self._bearer_token_arg
 
     def post(self, message, msg_id=None, reply=False, attributes=None, attachments=None,
              suppress_email_notification=False, encoding=None, timeout=None, **kwargs):
@@ -330,6 +336,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
 
         try:
             self._check_if_message_on_server(msg_id)  # raises exceptions if no message or no response from server
@@ -390,11 +398,15 @@ class Logbook(object):
         if self._password:
             attributes['upwd'] = self._password
 
+        request_headers = dict()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
+
         just_text = list()
         just_text.append(('Text', ('', text.encode('iso-8859-1'))))
         try:
             response = requests.post(self._url, data=attributes, verify=False, allow_redirects=False,
-                                     files=just_text)
+                                     headers=request_headers, files=just_text)
         except requests.Timeout as e:
             # Catch here a timeout o the post request.
             # Raise the logbook excetion and let the user handle it
@@ -431,6 +443,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
 
         try:
             self._check_if_message_on_server(msg_id)  # check if something to delete
@@ -467,6 +481,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
 
         # Putting n_results = 0 crashes the elog. also in the web-gui.
         n_results = 1 if n_results < 1 else n_results
@@ -524,6 +540,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
 
         try:
             response = requests.get(self._url + 'page', headers=request_headers,
@@ -557,6 +575,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
 
         try:
             response = requests.get(url, headers=request_headers, allow_redirects=False,
@@ -585,6 +605,8 @@ class Logbook(object):
         request_headers = dict()
         if self._user or self._password:
             request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+        if self._bearer_token:
+            request_headers['Authorization'] = 'Bearer ' + self._bearer_token
         try:
             response = requests.get(self._url + str(msg_id), headers=request_headers, allow_redirects=False,
                                     verify=False, timeout=timeout)

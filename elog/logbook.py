@@ -109,6 +109,7 @@ class Logbook(object):
         self._password = _handle_pswd(password, encrypt_pwd)
         self._bearer_token_arg = bearer_token
 
+    @property
     def _bearer_token(self):
         return self._bearer_token_arg() if callable(self._bearer_token_arg) else self._bearer_token_arg
 
@@ -855,6 +856,7 @@ def _validate_response(response):
                 raise LogbookMessageRejected('Rejected because of unknown error.')
 
         # Other unknown errors
+        print (response.status_code, response.reason, response.text)
         raise LogbookMessageRejected('Rejected because of unknown error.')
     else:
         location = response.headers.get('Location')

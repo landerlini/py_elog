@@ -15,7 +15,7 @@ class Logbook(object):
     """
 
     def __init__(self, hostname, logbook='', port=None, user=None, password=None, subdir='', use_ssl=True,
-                 encrypt_pwd=True, bearer_token=None):
+                 encrypt_pwd=True, bearer_token=None, verify_ssl=False):
         """
         :param hostname: elog server hostname. If whole url is specified here, it will be parsed and arguments:
                          "logbook, port, subdir, use_ssl" will be overwritten by parsed values.
@@ -31,6 +31,7 @@ class Logbook(object):
                             salt= '' and rounds=5000)
         :param bearer_token: bearer token (if authentication needed) Access Token as obtained by an OAuth2 issuer.
                              If callable, the token is retrieved calling this function each time is needed.
+        :param verify_ssl: verify the SSL certificate when connecting through HTTPS. Has no effect with HTTP.
         :return:
         """
         hostname = hostname.strip()
@@ -44,6 +45,7 @@ class Logbook(object):
         url_scheme = parsed_url.scheme
         if url_scheme == 'http':
             use_ssl = False
+            verify_ssl = False
 
         elif url_scheme == 'https':
             use_ssl = True
@@ -54,6 +56,7 @@ class Logbook(object):
                 url_scheme = 'https'
             else:
                 url_scheme = 'http'
+                verify_ssl = False
 
         # ---- handle port -----
         # 1) by default use port defined in the url
@@ -108,6 +111,7 @@ class Logbook(object):
         self._user = user
         self._password = _handle_pswd(password, encrypt_pwd)
         self._bearer_token_arg = bearer_token
+        self._verify_ssl = verify_ssl
 
     @property
     def _bearer_token(self):
@@ -292,8 +296,15 @@ class Logbook(object):
         attributes_to_edit = _encode_values(attributes_to_edit)
 
         try:
+            request_headers = dict()
+            if self._user or self._password:
+                request_headers['Cookie'] = self._make_user_and_pswd_cookie()
+            if self._bearer_token:
+                request_headers['Authorization'] = 'Bearer ' + self._bearer_token
+
             response = requests.post(self._url, data=attributes_to_edit, files=new_attachment_list,
-                                     allow_redirects=False, verify=False, timeout=timeout)
+                                     headers=request_headers, allow_redirects=False, verify=self._verify_ssl, 
+                                     timeout=timeout)
 
             # Validate response. Any problems will raise an Exception.
             resp_message, resp_headers, resp_msg_id = _validate_response(response)
@@ -343,7 +354,7 @@ class Logbook(object):
         try:
             self._check_if_message_on_server(msg_id)  # raises exceptions if no message or no response from server
             response = requests.get(self._url + str(msg_id) + '?cmd=download', headers=request_headers,
-                                    allow_redirects=False, verify=False, timeout=timeout)
+                                    allow_redirects=False, verify=self._verify_ssl, timeout=timeout)
 
             # Validate response. If problems Exception will be thrown.
             resp_message, resp_headers, resp_msg_id = _validate_response(response)
@@ -406,7 +417,7 @@ class Logbook(object):
         just_text = list()
         just_text.append(('Text', ('', text.encode('iso-8859-1'))))
         try:
-            response = requests.post(self._url, data=attributes, verify=False, allow_redirects=False,
+            response = requests.post(self._url, data=attributes, verify=self._verify_ssl, allow_redirects=False,
                                      headers=request_headers, files=just_text)
         except requests.Timeout as e:
             # Catch here a timeout o the post request.
@@ -451,7 +462,7 @@ class Logbook(object):
             self._check_if_message_on_server(msg_id)  # check if something to delete
 
             response = requests.get(self._url + str(msg_id) + '?cmd=Delete&confirm=Yes', headers=request_headers,
-                                    allow_redirects=False, verify=False, timeout=timeout)
+                                    allow_redirects=False, verify=self._verify_ssl, timeout=timeout)
 
             _validate_response(response)  # raises exception if any other error identified
 
@@ -507,7 +518,7 @@ class Logbook(object):
 
         try:
             response = requests.get(self._url, params=params, headers=request_headers,
-                                    allow_redirects=False, verify=False, timeout=timeout)
+                                    allow_redirects=False, verify=self._verify_ssl, timeout=timeout)
 
             # Validate response. If problems Exception will be thrown.
             _validate_response(response)
@@ -546,7 +557,7 @@ class Logbook(object):
 
         try:
             response = requests.get(self._url + 'page', headers=request_headers,
-                                    allow_redirects=False, verify=False, timeout=timeout)
+                                    allow_redirects=False, verify=self._verify_ssl, timeout=timeout)
 
             # Validate response. If problems Exception will be thrown.
             _validate_response(response)
@@ -581,7 +592,7 @@ class Logbook(object):
 
         try:
             response = requests.get(url, headers=request_headers, allow_redirects=False,
-                                    verify=False, timeout=timeout)
+                                    verify=self._verify_ssl, timeout=timeout)
             # If there is no message code 200 will be returned (OK) and _validate_response will not recognise it
             # but there will be some error in the html code.
             resp_message, resp_headers, resp_msg_id = _validate_response(response)
@@ -610,7 +621,7 @@ class Logbook(object):
             request_headers['Authorization'] = 'Bearer ' + self._bearer_token
         try:
             response = requests.get(self._url + str(msg_id), headers=request_headers, allow_redirects=False,
-                                    verify=False, timeout=timeout)
+                                    verify=self._verify_ssl, timeout=timeout)
 
             # If there is no message code 200 will be returned (OK) and _validate_response will not recognise it
             # but there will be some error in the html code.

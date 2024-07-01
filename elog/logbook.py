@@ -885,6 +885,15 @@ def _validate_response(response):
                     # it was not possible to get the msg_id. 
                     # this may happen when deleting the last entry of a logbook
                     msg_id = None
+                
+                if msg_id is None:
+                    try:
+                        msg_id = int(re.findall("Location: [^\r]*/([0-9]+)\r", response.text)[0])
+                    except ValueError:
+                        msg_id = None
+                    except IndexError:
+                        msg_id = None
+
 
         if b'type=password' in response.content or b'type="password"' in response.content:
             # Not too smart to check this way, but no other indication of this kind of error.
